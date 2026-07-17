@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full dark">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>ConverXord — Multi-Format Developer Tool</title>
+	
+	<!-- Tailwind CSS -->
+	<script src="https://cdn.tailwindcss.com"></script>
+	
+	<!-- Fonts -->
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+	
+	<!-- Parsers & Converters (Reliable UMD versions to prevent CORS/ESM hang issues) -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@iarna/toml@2.2.5/dist/toml.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/fast-xml-parser/4.3.6/fxparser.min.js"></script>
+	
+	<!-- UI Components -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/tokyo-night-dark.min.css">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+	
+	<script>
+		tailwind.config = {
+			darkMode: 'class',
+			theme: {
+				extend: {
+					fontFamily: {
+						sans: ['Inter', 'sans-serif'],
+						mono: ['Fira Code', 'monospace'],
+					},
+					animation: {
+						'fade-in': 'fadeIn 0.4s ease-out',
+						'fade-in-fast': 'fadeIn 0.2s ease-out',
+						'slide-up': 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+						'slide-down': 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+						'scale-in': 'scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+						'pulse-soft': 'pulseSoft 2.5s ease-in-out infinite',
+						'shimmer': 'shimmer 2s linear infinite',
+						'bounce-subtle': 'bounceSubtle 0.6s ease-out',
+						'pop-in': 'popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+					},
+					keyframes: {
+						fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+						slideUp: { '0%': { opacity: '0', transform: 'translateY(12px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+						slideDown: { '0%': { opacity: '0', transform: 'translateY(-8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+						scaleIn: { '0%': { opacity: '0', transform: 'scale(0.94)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+						pulseSoft: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.55' } },
+						shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+						bounceSubtle: { '0%': { transform: 'scale(0.9)' }, '50%': { transform: 'scale(1.04)' }, '100%': { transform: 'scale(1)' } },
+						popIn: { '0%': { opacity: '0', transform: 'scale(0.7)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+					},
+				}
+			}
+		}
+	</script>
+	<style>
+		:root {
+			--brand-500: #6366f1;
+			--format-xml: #e67e22;
+			--format-json: #3498db;
+			--format-frontmatter: #9b59b6;
+			--format-yaml: #2ecc71;
+			--format-toml: #e84393;
+			--format-csv: #1abc9c;
+			--format-tsv: #00b894;
+		}
+		* { box-sizing: border-box; }
+		body { font-family: 'Inter', sans-serif; transition: background-color 0.35s ease, color 0.35s ease; }
+		::-webkit-scrollbar { width: 6px; height: 6px; }
+		::-webkit-scrollbar-track { background: transparent; }
+		.dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+		.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+		::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+		::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+		.tree-arrow { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); display: inline-flex; align-items: center; justify-content: center; }
+		.tree-arrow.rotated { transform: rotate(90deg); }
+		.tree-child-wrapper { transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease; overflow: hidden; }
+		.tree-child-wrapper.collapsed { max-height: 0 !important; opacity: 0; pointer-events: none; }
+		.tree-child-wrapper.expanded { max-height: 8000px; opacity: 1; }
+		pre, code, pre code.hljs { background: transparent !important; padding: 0 !important; white-space: pre-wrap !important; word-wrap: break-word !important; word-break: normal !important; overflow-wrap: break-word !important; }
+		button:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; border-radius: 6px; }
+		textarea:focus-visible { outline-offset: -2px; border-radius: 0; }
+		.header-glow { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #6366f1, #a5b4fc, #6366f1); background-size: 200% 100%; animation: shimmer 3s linear infinite; }
+		.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; transition: opacity 0.25s ease; }
+		.modal-content { background: white; border-radius: 1.5rem; max-width: 48rem; width: 100%; padding: 2rem; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 85vh; overflow-y: auto; }
+		.dark .modal-content { background: #1e293b; color: #e2e8f0; }
+		.format-icon { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.5rem; flex-shrink: 0; }
+	</style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-full flex flex-col transition-colors duration-300">
+	<header class="relative border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 md:px-6 py-3 md:py-4 sticky top-0 z-30 shadow-sm transition-colors duration-300">
+		<div class="header-glow"></div>
+		<div class="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+			<div class="flex items-center gap-3">
+				<div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/25 flex items-center justify-center flex-shrink-0 animate-pop-in">
+					<i class="fa-solid fa-code-branch text-lg"></i>
+				</div>
+				<div>
+					<h1 class="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+						ConverXord
+						<span class="text-[10px] md:text-xs font-normal py-0.5 px-2 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-full border border-indigo-500/20 whitespace-nowrap">Multi-Format Developer Tool</span>
+					</h1>
+					<p class="text-[11px] md:text-xs text-slate-500 dark:text-slate-400 mt-0.5">XML · JSON · YAML · TOML · CSV · TSV</p>
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				<button id="swap-formats-btn" onclick="swapFormats()" class="p-2 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95" title="Swap input and output formats">
+					<i class="fa-solid fa-arrows-left-right text-sm"></i>
+				</button>
+				<button id="theme-toggle" onclick="toggleTheme()" class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95" title="Toggle theme">
+					<i id="theme-sun" class="fa-solid fa-sun text-lg hidden"></i>
+					<i id="theme-moon" class="fa-solid fa-moon text-lg"></i>
+				</button>
+			</div>
+		</div>
+	</header>
+
+	<main class="flex-grow max-w-7xl w-full mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-stretch animate-fade-in">
+		<section class="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300 animate-scale-in" style="animation-delay: 0.05s;">
+			<div class="px-3 md:px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+				<div class="flex justify-between items-center flex-wrap gap-2">
+					<div class="flex items-center gap-2">
+						<span class="inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500 animate-pulse-soft"></span>
+						<h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Source Configuration</h2>
+					</div>
+					<div class="flex items-center gap-1.5 flex-wrap">
+						<button onclick="loadSample()" class="text-xs px-2.5 py-1.5 font-medium border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-all duration-200 text-indigo-600 dark:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-600">
+							<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Demo
+						</button>
+						<button onclick="loadFromLocalStorage()" class="text-xs px-2.5 py-1.5 font-medium border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-all duration-200 text-emerald-600 dark:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-600">
+							<i class="fa-solid fa-floppy-disk mr-1"></i> Restore
+						</button>
+						<button onclick="clearInput()" class="text-xs px-2.5 py-1.5 font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-all duration-200">
+							<i class="fa-solid fa-trash-can mr-1"></i> Clear
+						</button>
+					</div>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Input Format</span>
+					<div class="flex flex-wrap gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-lg">
+						<button id="src-xml" onclick="setInputFormat('xml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-code mr-1" style="color:var(--format-xml)"></i>XML</button>
+						<button id="src-json" onclick="setInputFormat('json')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-brackets-curly mr-1" style="color:var(--format-json)"></i>JSON</button>
+						<button id="src-frontmatter" onclick="setInputFormat('frontmatter')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-lines mr-1" style="color:var(--format-frontmatter)"></i>FrontMatter</button>
+						<button id="src-yaml" onclick="setInputFormat('yaml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-signature mr-1" style="color:var(--format-yaml)"></i>YAML</button>
+						<button id="src-toml" onclick="setInputFormat('toml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-gear mr-1" style="color:var(--format-toml)"></i>TOML</button>
+						<button id="src-csv" onclick="setInputFormat('csv')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-table mr-1" style="color:var(--format-csv)"></i>CSV</button>
+						<button id="src-tsv" onclick="setInputFormat('tsv')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-table-columns mr-1" style="color:var(--format-tsv)"></i>TSV</button>
+					</div>
+				</div>
+			</div>
+			<div id="drop-zone" class="relative flex-grow flex flex-col min-h-[350px] lg:min-h-0">
+				<div id="drop-overlay" class="hidden absolute inset-0 bg-indigo-500/10 dark:bg-indigo-500/20 backdrop-blur-sm border-2 border-dashed border-indigo-500 rounded-b-xl z-20 flex flex-col justify-center items-center pointer-events-none transition-all duration-150">
+					<i class="fa-solid fa-cloud-arrow-up text-4xl text-indigo-500 mb-3 animate-bounce-subtle"></i>
+					<p class="font-semibold text-indigo-600 dark:text-indigo-400">Drop your file right here</p>
+				</div>
+				<textarea id="editor-input" oninput="processData()" placeholder="Paste or type your data magic here…" class="w-full flex-grow p-4 resize-none bg-transparent outline-none font-mono text-sm leading-relaxed text-slate-800 dark:text-slate-100 focus:ring-0 placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-colors duration-200"></textarea>
+				<div class="px-3 md:px-4 py-2.5 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs text-slate-400">
+					<div class="flex items-center gap-3 flex-wrap">
+						<span id="char-count" class="font-medium text-slate-500 dark:text-slate-400 tabular-nums">0 characters</span>
+						<span class="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+						<span id="line-count" class="hidden sm:inline text-slate-400">0 lines</span>
+					</div>
+					<label class="cursor-pointer text-indigo-500 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold transition-colors duration-200 hover:text-indigo-600 dark:hover:text-indigo-300">
+						<i class="fa-solid fa-file-import"></i> Import file
+						<input id="file-input" type="file" accept=".md,.yml,.yaml,.json,.xml,.toml,.csv,.tsv,.txt" class="hidden" onchange="handleFileSelect(event)">
+					</label>
+				</div>
+			</div>
+		</section>
+
+		<section class="flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300 animate-scale-in" style="animation-delay: 0.12s;">
+			<div class="px-3 md:px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+				<div class="flex justify-between items-center flex-wrap gap-2">
+					<div class="flex items-center gap-2">
+						<span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+						<h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Target Output</h2>
+					</div>
+					<div class="flex items-center gap-1.5">
+						<div id="output-toggle" class="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800 text-xs">
+							<button onclick="setViewType('code')" id="view-code-btn" class="px-2.5 py-1 rounded-md font-medium transition-all duration-200 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm">
+								<i class="fa-solid fa-code mr-1"></i> Code
+							</button>
+							<button onclick="setViewType('tree')" id="view-tree-btn" class="px-2.5 py-1 rounded-md font-medium transition-all duration-200 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+								<i class="fa-solid fa-diagram-project mr-1"></i> Tree
+							</button>
+						</div>
+						<button onclick="copyOutput()" class="p-2 text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 hover:scale-105 active:scale-95">
+							<i class="fa-solid fa-copy text-sm"></i>
+						</button>
+						<button onclick="downloadOutput()" class="p-2 text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 hover:scale-105 active:scale-95">
+							<i class="fa-solid fa-download text-sm"></i>
+						</button>
+					</div>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Output Format</span>
+					<div class="flex flex-wrap gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-lg">
+						<button id="tgt-xml" onclick="setOutputFormat('xml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-code mr-1" style="color:var(--format-xml)"></i>XML</button>
+						<button id="tgt-json" onclick="setOutputFormat('json')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-brackets-curly mr-1" style="color:var(--format-json)"></i>JSON</button>
+						<button id="tgt-frontmatter" onclick="setOutputFormat('frontmatter')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-lines mr-1" style="color:var(--format-frontmatter)"></i>FrontMatter</button>
+						<button id="tgt-yaml" onclick="setOutputFormat('yaml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-file-signature mr-1" style="color:var(--format-yaml)"></i>YAML</button>
+						<button id="tgt-toml" onclick="setOutputFormat('toml')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-gear mr-1" style="color:var(--format-toml)"></i>TOML</button>
+						<button id="tgt-csv" onclick="setOutputFormat('csv')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-table mr-1" style="color:var(--format-csv)"></i>CSV</button>
+						<button id="tgt-tsv" onclick="setOutputFormat('tsv')" class="flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200"><i class="fa-solid fa-table-columns mr-1" style="color:var(--format-tsv)"></i>TSV</button>
+					</div>
+				</div>
+			</div>
+			<div id="indentation-controls" class="px-3 md:px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/15 border-b border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs transition-all duration-200">
+				<div class="flex items-center gap-3 flex-wrap">
+					<span class="font-semibold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+						<i class="fa-solid fa-sliders"></i> Indent:
+					</span>
+					<div class="inline-flex rounded-md p-0.5 bg-slate-200/60 dark:bg-slate-800">
+						<button onclick="setIndentType('tabs')" id="indent-type-tabs" class="px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm">Tabs</button>
+						<button onclick="setIndentType('spaces')" id="indent-type-spaces" class="px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">Spaces</button>
+					</div>
+					<div class="flex items-center gap-1.5">
+						<label for="indent-size" class="text-slate-500 dark:text-slate-400">Width:</label>
+						<select id="indent-size" onchange="handleIndentSizeChange()" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+							<option value="1">1</option>
+							<option value="2">2</option>
+							<option value="3">3</option>
+							<option value="4" selected>4</option>
+							<option value="6">6</option>
+							<option value="8">8</option>
+						</select>
+					</div>
+				</div>
+				<div id="yaml-tab-alert" class="hidden text-amber-500 flex items-center gap-1 font-medium bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 animate-pulse-soft text-[10px]">
+					<i class="fa-solid fa-triangle-exclamation"></i> <span>YAML: tabs → spaces</span>
+				</div>
+				<div id="csv-indent-note" class="hidden text-slate-400 text-[10px] italic">Indentation not applicable for CSV/TSV</div>
+			</div>
+			<div class="relative flex-grow flex flex-col p-3 md:p-4 overflow-y-auto max-h-[500px] lg:max-h-none min-h-[350px]" id="output-area">
+				<div id="output-code-wrapper" class="overflow-x-auto whitespace-pre-wrap block h-full w-full outline-none text-slate-800 dark:text-slate-200">
+					<pre><code id="output-code" class="font-mono text-xs leading-relaxed block select-all"></code></pre>
+				</div>
+				<div id="output-tree" class="hidden font-mono text-xs select-none h-full w-full overflow-auto"></div>
+				<div id="error-banner" class="hidden mt-auto mb-2 bg-red-50 dark:bg-red-950/40 border-l-4 border-red-500 p-3 md:p-4 rounded-r-lg shadow-sm animate-slide-up">
+					<div class="flex items-start gap-3">
+						<div class="flex-shrink-0 mt-0.5"><i class="fa-solid fa-triangle-exclamation text-red-500 text-lg"></i></div>
+						<div class="flex-1 flex flex-col md:flex-row md:justify-between items-start md:items-center gap-3">
+							<div>
+								<p class="text-sm font-semibold text-red-800 dark:text-red-300">Parsing Error</p>
+								<p id="error-message" class="text-xs text-red-700 dark:text-red-400 mt-1 whitespace-pre-line font-mono"></p>
+							</div>
+							<button id="quick-fix-tabs-btn" onclick="quickFixTabs()" class="hidden px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold shadow-sm transition-all duration-200 flex-shrink-0 active:scale-95">
+								<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Fix Tabs → Spaces
+							</button>
+						</div>
+					</div>
+				</div>
+				<div id="placeholder-banner" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-6 text-center pointer-events-none transition-opacity duration-300">
+					<i class="fa-solid fa-code text-5xl mb-4 opacity-40 text-slate-400 dark:text-slate-600"></i>
+					<p class="font-medium text-sm">Your data is waiting to dance...</p>
+					<p class="text-xs max-w-xs mt-1 text-slate-400 dark:text-slate-500">Paste something or hit "Demo" / "Restore" to see the magic!</p>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<!-- Restored Feature Modals & Buttons Block -->
+	<div class="max-w-7xl mx-auto px-4 pb-6 flex flex-wrap gap-3 justify-center">
+		<button onclick="openModal('intro')" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-sm font-semibold shadow-md transition-all duration-200 hover:scale-105 flex items-center gap-2" title="What makes CoveXord special?">
+			<i class="fa-solid fa-circle-info"></i> Why CoveXord?
+		</button>
+		<button onclick="openModal('theory')" class="px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-full text-sm font-semibold shadow-md transition-all duration-200 hover:scale-105 flex items-center gap-2" title="Understand the art of data formats">
+			<i class="fa-solid fa-book-open"></i> Format Guide
+		</button>
+		<button onclick="openModal('about')" class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-sm font-semibold shadow-md transition-all duration-200 hover:scale-105 flex items-center gap-2" title="Meet the creator and connect">
+			<i class="fa-solid fa-user-group"></i> Meet Julibe
+		</button>
+		<button class="share px-5 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full text-sm font-semibold shadow-lg transition-all duration-200 hover:scale-105 flex items-center gap-2" onclick="shareTwitter()" title="Share CoveXord on Twitter">
+			<i class="fa-brands fa-twitter"></i> Share on Twitter
+		</button>
+	</div>
+
+	<!-- Restored Footer Block -->
+	<footer class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 px-4 md:px-6 mt-auto transition-colors duration-300">
+		<div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+			<div class="space-y-2">
+				<span class="block font-semibold text-sm text-slate-600 dark:text-slate-300">Stay Connected</span>
+				<div id="socials">
+					<nav><ul class="flex flex-wrap gap-3">
+						<li><a href="https://julibe.com/" target="_blank" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-solid fa-globe"></i><span>Web</span></a></li>
+						<li><a href="https://julibe.com/github" target="_blank" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-brands fa-github"></i><span>GitHub</span></a></li>
+						<li><a href="https://julibe.com/whatsapp" target="_blank" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a></li>
+						<li><a href="https://julibe.com/twitter" target="_blank" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-brands fa-twitter"></i><span>X (Twitter)</span></a></li>
+						<li><a href="https://julibe.com/instagram" target="_blank" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-brands fa-instagram"></i><span>Instagram</span></a></li>
+						<li><a href="mailto:mail@julibe.com" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><i class="fa-solid fa-envelope"></i><span>Email</span></a></li>
+					</ul></nav>
+				</div>
+			</div>
+			<div class="space-y-1">
+				<span class="block font-semibold text-sm text-slate-600 dark:text-slate-300">CoveXord Suite</span>
+				<p class="text-slate-400 dark:text-slate-500">Secure local processing</p>
+				<p class="text-slate-400 dark:text-slate-500">XML · JSON · YAML · TOML · CSV/TSV</p>
+			</div>
+			<div class="space-y-1 text-right md:text-right">
+				<div id="copyright" title="All Rights Reserved by Julibe 2026">Copyright &copy; 2026 <a href="https://julibe.com/" target="_blank" class="underline hover:text-indigo-500">Julibe.com</a>.</div>
+				<p class="text-slate-400 dark:text-slate-500">Keyboard shortcuts: Ctrl+Shift+S swap, C copy, D download</p>
+			</div>
+		</div>
+	</footer>
+
+	<!-- Restored Modal Overlay and HTML blocks -->
+	<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+		<div class="modal-content animate-pop-in" onclick="event.stopPropagation()">
+			<button class="absolute top-3 right-4 text-slate-400 hover:text-slate-800 dark:hover:text-white text-xl" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+			<div id="modal-body"></div>
+		</div>
+	</div>
+
+	<div id="intro-content" class="hidden">
+		<h2 class="text-2xl font-bold mb-3 text-indigo-600 dark:text-indigo-400 flex items-center gap-2"><i class="fa-solid fa-circle-info"></i> CoveXord: Your Data's Best Shape-Shifter</h2>
+		<p class="mb-3 leading-relaxed">Tired of juggling converters? CoveXord puts XML, JSON, YAML, TOML, Front Matter, CSV, and TSV right at your fingertips - no server, no wait, no nonsense. It's a sandbox where your data transforms instantly, beautifully, and privately.</p>
+		<p class="leading-relaxed">Whether you're tweaking configs, debugging APIs, or just playing with structured data, CoveXord gives you real-time previews, interactive trees, and smart auto-save so your flow never breaks. Built with love by <a href="https://julibe.com/" target="_blank" class="underline text-indigo-500">Julibe</a>, it's the free, open-source companion every developer deserves.</p>
+	</div>
+	<div id="theory-content" class="hidden">
+		<h2 class="text-2xl font-bold mb-4 text-emerald-600 dark:text-emerald-400 flex items-center gap-2"><i class="fa-solid fa-book-open"></i> The Seven Languages of Data</h2>
+		<p class="mb-4 leading-relaxed">Data is the DNA of the web, but it speaks many dialects. Each format has a unique personality and purpose. CoveXord not only converts between them - it helps you learn their differences and strengths.</p>
+		<div class="space-y-4">
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#e67e22]/10 text-[#e67e22] flex-shrink-0"><i class="fa-solid fa-file-code"></i></span>
+				<div>
+					<strong class="text-sm">XML (eXtensible Markup Language)</strong>
+					<p class="text-xs mt-0.5">The veteran of structured data. XML uses tags to describe hierarchy, ideal for documents, SOAP APIs, and configuration where strict validation matters. It can be verbose, but it's powerful.</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#3498db]/10 text-[#3498db] flex-shrink-0"><i class="fa-solid fa-brackets-curly"></i></span>
+				<div>
+					<strong class="text-sm">JSON (JavaScript Object Notation)</strong>
+					<p class="text-xs mt-0.5">The crowd favorite. Lightweight, human-readable, and the backbone of modern APIs. JSON represents data as key-value pairs and arrays, perfect for web apps and configuration that loves simplicity.</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#9b59b6]/10 text-[#9b59b6] flex-shrink-0"><i class="fa-solid fa-file-lines"></i></span>
+				<div>
+					<strong class="text-sm">Front Matter</strong>
+					<p class="text-xs mt-0.5">A hidden gem for content creators. Found at the top of Markdown files, it uses YAML between two <code>---</code> lines to store metadata like titles, tags, and dates. Static site generators like Jekyll and Hugo love it.</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#2ecc71]/10 text-[#2ecc71] flex-shrink-0"><i class="fa-solid fa-file-signature"></i></span>
+				<div>
+					<strong class="text-sm">YAML (YAML Ain't Markup Language)</strong>
+					<p class="text-xs mt-0.5">Designed for humans, not machines. YAML uses indentation to show structure, making it extremely readable. Popular for DevOps (Docker, Kubernetes) and configuration files, but beware of the tab vs. space dilemma!</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#e84393]/10 text-[#e84393] flex-shrink-0"><i class="fa-solid fa-gear"></i></span>
+				<div>
+					<strong class="text-sm">TOML (Tom's Obvious Minimal Language)</strong>
+					<p class="text-xs mt-0.5">The minimalists' dream. TOML aims to be a simple configuration file format with obvious semantics. It's clean, table-driven, and widely used in Rust ecosystem (Cargo.toml) and Python projects.</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#1abc9c]/10 text-[#1abc9c] flex-shrink-0"><i class="fa-solid fa-table"></i></span>
+				<div>
+					<strong class="text-sm">CSV (Comma-Separated Values)</strong>
+					<p class="text-xs mt-0.5">The spreadsheet companion. CSV stores tabular data as plain text, with commas separating columns. It's universally supported by Excel, databases, and data analysis tools. Simple yet mighty.</p>
+				</div>
+			</div>
+			<div class="flex gap-3 items-start">
+				<span class="format-icon bg-[#00b894]/10 text-[#00b894] flex-shrink-0"><i class="fa-solid fa-table-columns"></i></span>
+				<div>
+					<strong class="text-sm">TSV (Tab-Separated Values)</strong>
+					<p class="text-xs mt-0.5">CSV's disciplined cousin. Instead of commas, tabs separate values, which avoids issues when data contains commas. Ideal for copying from spreadsheets or handling text-heavy data fields.</p>
+				</div>
+			</div>
+		</div>
+		<p class="mt-4 leading-relaxed text-xs">CoveXord bridges these worlds, letting you move effortlessly between them - and perhaps you'll discover a new favorite format along the way.</p>
+	</div>
+	<div id="about-content" class="hidden">
+		<h2 class="text-2xl font-bold mb-3 text-rose-500 dark:text-rose-400 flex items-center gap-2"><i class="fa-solid fa-user-group"></i> Stay Connected with Julibe</h2>
+		<p class="mb-3 leading-relaxed">CoveXord is crafted by <a href="https://julibe.com/" target="_blank" class="underline">@Julibe</a>, a creative developer passionate about tools that empower people. This project is open-source and welcomes ideas, contributions, or a simple "hello".</p>
+		<p class="mb-3 leading-relaxed">Find Julibe across the web - whether you want to collaborate on a new tool, share feedback, or just say thanks, every message is a spark. Use the social links below or reach out directly.</p>
+		<p class="leading-relaxed">Always open to new ideas and collaborations. Let's create something great together.</p>
+		<p class="mt-4 text-xs text-slate-500 dark:text-slate-400">Copyright © 2026 <a href="https://julibe.com/" target="_blank" class="underline">Julibe.com</a>. All rights reserved.</p>
+	</div>
+
+	<div id="toast" class="fixed bottom-6 right-6 transform translate-y-16 opacity-0 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xl transition-all duration-350 z-50 pointer-events-none">
+		<i class="fa-solid fa-circle-check text-emerald-400 dark:text-emerald-600"></i>
+		<span id="toast-text">Output Copied!</span>
+	</div>
+
+	<script>
+		(function() {
+			const formats = ['xml', 'json', 'frontmatter', 'yaml', 'toml', 'csv', 'tsv'];
+			const local_storage_key = 'covexord-session';
+			const autosave_delay = 800;
+
+			const demo_templates = {
+				xml: `<?xml version="1.0" encoding="UTF-8"?>\n<project status="Production">\n  <name>CoveXord Engine</name>\n  <version>3.1.0</version>\n  <modules>\n    <module>Parser</module>\n    <module>Formatter</module>\n    <module>TreeRenderer</module>\n  </modules>\n</project>`,
+				json: `{\n  "name": "CoveXord Engine",\n  "version": "3.1.0",\n  "status": "Production",\n  "modules": ["Parser","Formatter","TreeRenderer"]\n}`,
+				yaml: `name: CoveXord Engine\nversion: 3.1.0\nstatus: Production\nmodules:\n  - Parser\n  - Formatter\n  - TreeRenderer`,
+				frontmatter: `---\nname: CoveXord Engine\nversion: 3.1.0\nstatus: Production\n---\n\n# CoveXord Developer Suite\n\nConvert anything, anywhere.`,
+				toml: `name = "CoveXord Engine"\nversion = "3.1.0"\nstatus = "Production"\n\nmodules = [ "Parser", "Formatter", "TreeRenderer" ]`,
+				csv: `name,version,status,modules\nCoveXord Engine,3.1.0,Production,"Parser,Formatter,TreeRenderer"`,
+				tsv: `name\tversion\tstatus\tmodules\nCoveXord Engine\t3.1.0\tProduction\tParser,Formatter,TreeRenderer`,
+			};
+
+			function getXmlParser() {
+				if (window.fxparser && window.fxparser.XMLParser) { return window.fxparser.XMLParser; }
+				throw new Error('XML Parser not loaded.');
+			}
+			function getXmlBuilder() {
+				if (window.fxparser && window.fxparser.XMLBuilder) { return window.fxparser.XMLBuilder; }
+				throw new Error('XML Builder not loaded.');
+			}
+			function getXmlValidator() {
+				if (window.fxparser && window.fxparser.XMLValidator) { return window.fxparser.XMLValidator; }
+				throw new Error('XML Validator not loaded.');
+			}
+
+			const app_state = {
+				inputFormat: 'frontmatter',
+				outputFormat: 'json',
+				viewType: 'code',
+				indentType: 'tabs',
+				indentSize: 4,
+				theme: 'dark',
+				lastValidObj: null,
+				lastRawResult: ''
+			};
+
+			const query = (sel) => document.querySelector(sel);
+			const editor_input = query('#editor-input');
+			const output_code = query('#output-code');
+			const output_tree = query('#output-tree');
+			const output_code_wrapper = query('#output-code-wrapper');
+			const error_banner = query('#error-banner');
+			const error_message = query('#error-message');
+			const placeholder_banner = query('#placeholder-banner');
+			const drop_zone = query('#drop-zone');
+			const drop_overlay = query('#drop-overlay');
+			const tab_fix_btn = query('#quick-fix-tabs-btn');
+			const yaml_tab_alert = query('#yaml-tab-alert');
+			const csv_indent_note = query('#csv-indent-note');
+			const indentation_controls = query('#indentation-controls');
+			const char_count_el = query('#char-count');
+			const line_count_el = query('#line-count');
+			const toast_el = query('#toast');
+			const toast_text = query('#toast-text');
+			
+			// Modal bindings
+			const modal_overlay = query('#modal-overlay');
+			const modal_body = query('#modal-body');
+
+			let autosave_timer = null;
+			let toast_timer = null;
+
+			function toggleTheme() {
+				app_state.theme = app_state.theme === 'dark' ? 'light' : 'dark';
+				localStorage.setItem('covexord-theme', app_state.theme);
+				applyTheme();
+			}
+			function applyTheme() {
+				const html = document.documentElement;
+				const sun = query('#theme-sun');
+				const moon = query('#theme-moon');
+				if (app_state.theme === 'dark') {
+					html.classList.add('dark');
+					sun.classList.remove('hidden');
+					moon.classList.add('hidden');
+				} else {
+					html.classList.remove('dark');
+					sun.classList.add('hidden');
+					moon.classList.remove('hidden');
+				}
+			}
+
+			function setInputFormat(format) {
+				app_state.inputFormat = format;
+				updateFormatSelectors();
+				loadSample();
+			}
+			function setOutputFormat(format) {
+				app_state.outputFormat = format;
+				updateFormatSelectors();
+				updateIndentationVisibility();
+				processData();
+			}
+			function swapFormats() {
+				const temp = app_state.inputFormat;
+				app_state.inputFormat = app_state.outputFormat;
+				app_state.outputFormat = temp;
+				updateFormatSelectors();
+				updateIndentationVisibility();
+				const sample = demo_templates[app_state.inputFormat];
+				if (sample) { editor_input.value = sample; }
+				processData();
+			}
+
+			function updateFormatSelectors() {
+				const base_class = 'flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50';
+				const active_class = 'flex-1 min-w-fit py-1.5 px-2 rounded-md text-xs font-medium transition-all duration-200 bg-white dark:bg-slate-700 text-slate-950 dark:text-white shadow-sm';
+				formats.forEach(fmt => {
+					const src_btn = query(`#src-${fmt}`);
+					const tgt_btn = query(`#tgt-${fmt}`);
+					if (src_btn) src_btn.className = app_state.inputFormat === fmt ? active_class : base_class;
+					if (tgt_btn) tgt_btn.className = app_state.outputFormat === fmt ? active_class : base_class;
+				});
+			}
+
+			function setIndentType(type) {
+				app_state.indentType = type;
+				const tabs_btn = query('#indent-type-tabs');
+				const spaces_btn = query('#indent-type-spaces');
+				const active = 'px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
+				const inactive = 'px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+				if (type === 'tabs') {
+					tabs_btn.className = active;
+					spaces_btn.className = inactive;
+				} else {
+					spaces_btn.className = active;
+					tabs_btn.className = inactive;
+				}
+				processData();
+			}
+			function handleIndentSizeChange() {
+				app_state.indentSize = parseInt(query('#indent-size').value, 10);
+				processData();
+			}
+			function updateIndentationVisibility() {
+				if (app_state.outputFormat === 'csv' || app_state.outputFormat === 'tsv') {
+					indentation_controls.classList.add('hidden');
+					csv_indent_note.classList.remove('hidden');
+				} else {
+					indentation_controls.classList.remove('hidden');
+					csv_indent_note.classList.add('hidden');
+				}
+			}
+			function setViewType(type) {
+				app_state.viewType = type;
+				const code_btn = query('#view-code-btn');
+				const tree_btn = query('#view-tree-btn');
+				const active = 'px-2.5 py-1 rounded-md font-medium transition-all duration-200 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
+				const inactive = 'px-2.5 py-1 rounded-md font-medium transition-all duration-200 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+				if (type === 'code') {
+					code_btn.className = active;
+					tree_btn.className = inactive;
+					output_code_wrapper.classList.remove('hidden');
+					output_tree.classList.add('hidden');
+				} else {
+					tree_btn.className = active;
+					code_btn.className = inactive;
+					output_tree.classList.remove('hidden');
+					output_code_wrapper.classList.add('hidden');
+				}
+				renderOutputs();
+			}
+
+			function loadSample() {
+				const sample = demo_templates[app_state.inputFormat];
+				if (sample) {
+					editor_input.value = sample;
+					processData();
+				}
+			}
+			function clearInput() {
+				editor_input.value = '';
+				processData();
+			}
+			function loadFromLocalStorage() {
+				const saved = localStorage.getItem(local_storage_key);
+				if (!saved) { showToast('No saved session found.', true); return; }
+				try {
+					const session = JSON.parse(saved);
+					editor_input.value = session.text || '';
+					if (session.inputFormat && formats.includes(session.inputFormat)) {
+						app_state.inputFormat = session.inputFormat;
+						updateFormatSelectors();
+					}
+					processData();
+					showToast('Session restored!');
+				} catch (e) { showToast('Failed to restore session.', true); }
+			}
+
+			// Modal functions
+			function openModal(type) {
+				const content = query(`#${type}-content`);
+				if (content) {
+					modal_body.innerHTML = content.innerHTML;
+					modal_overlay.classList.remove('hidden');
+				}
+			}
+			function closeModal() {
+				modal_overlay.classList.add('hidden');
+			}
+			
+			// Twitter Share function
+			function shareTwitter() {
+				const shareUrl = "https://julibe.com/pen/covexord";
+				const viaUser = "Julibe";
+				const messages = [
+					"Transforming data has never felt this smooth. CoveXord converts XML, JSON, YAML, TOML, CSV/TSV instantly in your browser!",
+					"Say goodbye to format headaches. CoveXord turns your messy data into clean, structured art - all client-side.",
+					"From YAML to XML to TOML... CoveXord handles it all. A true Swiss Army knife for developers.",
+					"Discover CoveXord: the free multi-format compiler that saves your session and lets you explore data like never before.",
+					"Data conversion should be joyful. CoveXord brings color, tree views, and autosave to your workflow."
+				];
+				const text = messages[Math.floor(Math.random() * messages.length)];
+				const hashtags = "DataConversion,XML,JSON,YAML,DeveloperTools,WebDev";
+				const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}&hashtags=${encodeURIComponent(hashtags)}&via=${encodeURIComponent(viaUser)}`;
+				window.open(twitterUrl, "_blank");
+			}
+
+			function processData() {
+				if ((app_state.inputFormat === 'xml' || app_state.outputFormat === 'xml') && typeof window.fxparser === 'undefined') {
+					if (!window._libRetryCount) window._libRetryCount = 0;
+					if (window._libRetryCount < 15) {
+						window._libRetryCount++;
+						setTimeout(processData, 100);
+						return;
+					} else {
+						showError('XML library failed to load from CDN. Check your connection.');
+						return;
+					}
+				}
+				if ((app_state.inputFormat === 'toml' || app_state.outputFormat === 'toml') && typeof window.TOML === 'undefined') {
+					if (!window._libRetryCount) window._libRetryCount = 0;
+					if (window._libRetryCount < 15) {
+						window._libRetryCount++;
+						setTimeout(processData, 100);
+						return;
+					} else {
+						showError('TOML library failed to load from CDN. Check your connection.');
+						return;
+					}
+				}
+				window._libRetryCount = 0;
+
+				const text = editor_input.value;
+				const char_count = text.length;
+				const line_count = text ? text.split(/\r?\n/).length : 0;
+				char_count_el.textContent = `${char_count} character${char_count !== 1 ? 's' : ''}`;
+				if (line_count_el) { line_count_el.textContent = `${line_count} line${line_count !== 1 ? 's' : ''}`; }
+
+				if (autosave_timer) clearTimeout(autosave_timer);
+				autosave_timer = setTimeout(() => {
+					localStorage.setItem(local_storage_key, JSON.stringify({ text, inputFormat: app_state.inputFormat, timestamp: Date.now() }));
+				}, autosave_delay);
+
+				if (!text.trim()) {
+					hideError();
+					placeholder_banner.classList.remove('hidden');
+					output_code.textContent = '';
+					output_tree.innerHTML = '';
+					app_state.lastValidObj = null;
+					app_state.lastRawResult = '';
+					return;
+				}
+				placeholder_banner.classList.add('hidden');
+				try {
+					let parsed_obj = null;
+					if (app_state.inputFormat === 'xml') {
+						const XMLValidator = getXmlValidator();
+						const validation = XMLValidator.validate(text, { allowBooleanAttributes: true });
+						if (validation !== true) {
+							const err_msg = validation.err ? `${validation.err.msg} (Line ${validation.err.line}, Col ${validation.err.col})` : 'Malformed XML.';
+							throw new Error(err_msg);
+						}
+						const parser = new (getXmlParser())({
+							ignoreAttributes: false, attributeNamePrefix: '@_', allowBooleanAttributes: true,
+							ignoreDeclaration: true, textNodeName: '#text', parseAttributeValue: true, trimValues: true,
+						});
+						parsed_obj = parser.parse(text);
+					} else if (app_state.inputFormat === 'json') {
+						parsed_obj = JSON.parse(text);
+					} else if (app_state.inputFormat === 'yaml') {
+						parsed_obj = jsyaml.load(text.replace(/\t/g, '  '));
+					} else if (app_state.inputFormat === 'toml') {
+						parsed_obj = TOML.parse(text);
+					} else if (app_state.inputFormat === 'csv') {
+						const result = Papa.parse(text, { header: false, skipEmptyLines: true });
+						parsed_obj = { rows: result.data.filter(row => row.some(cell => cell !== '')) };
+					} else if (app_state.inputFormat === 'tsv') {
+						const result = Papa.parse(text, { delimiter: '\t', header: false, skipEmptyLines: true });
+						parsed_obj = { rows: result.data.filter(row => row.some(cell => cell !== '')) };
+					} else if (app_state.inputFormat === 'frontmatter') {
+						const regex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+						const match = text.trim().match(regex);
+						if (!match) { throw new Error('Front Matter not detected. Make sure it starts and ends with "---"'); }
+						const raw_yaml = match[1];
+						const body_part = match[2] || '';
+						let attributes = {};
+						try { attributes = jsyaml.load(raw_yaml.replace(/\t/g, '  ')); } catch (e) { throw new Error(`YAML error in Front Matter: ${e.message}`); }
+						
+						parsed_obj = { attributes: attributes || {} };
+						if (body_part.trim()) {
+							parsed_obj.body = body_part;
+						}
+					}
+					app_state.lastValidObj = parsed_obj;
+					serializeOutput(parsed_obj);
+					hideError();
+				} catch (err) {
+					showError(err.message || String(err));
+					if (text.includes('\t') || text.includes('\u00A0')) { tab_fix_btn.classList.remove('hidden'); }
+					else { tab_fix_btn.classList.add('hidden'); }
+				}
+			}
+
+			function serializeOutput(obj) {
+				if (obj === null || obj === undefined) { return; }
+				let indent_str = '';
+				if (app_state.indentType === 'tabs') {
+					indent_str = '\t';
+					if (app_state.outputFormat === 'yaml' || app_state.outputFormat === 'frontmatter') {
+						yaml_tab_alert.classList.remove('hidden');
+						indent_str = ' '.repeat(app_state.indentSize);
+					} else { yaml_tab_alert.classList.add('hidden'); }
+				} else {
+					yaml_tab_alert.classList.add('hidden');
+					indent_str = ' '.repeat(app_state.indentSize);
+				}
+				let result_string = '';
+				if (app_state.outputFormat === 'json') {
+					result_string = JSON.stringify(obj, null, indent_str);
+				} else if (app_state.outputFormat === 'yaml') {
+					result_string = jsyaml.dump(obj, { indent: app_state.indentSize });
+				} else if (app_state.outputFormat === 'toml') {
+					result_string = TOML.stringify(obj);
+				} else if (app_state.outputFormat === 'xml') {
+					const builder = new (getXmlBuilder())({
+						format: true, indentBy: indent_str, ignoreAttributes: false,
+						attributeNamePrefix: '@_', suppressEmptyNode: true, textNodeName: '#text',
+					});
+					let xml_target = obj;
+					if (typeof obj === 'object' && obj !== null) {
+						xml_target = Array.isArray(obj) ? [...obj] : { ...obj };
+						if (!Array.isArray(xml_target) && '?xml' in xml_target) { delete xml_target['?xml']; }
+					}
+					let wrap_obj = xml_target;
+					if (Array.isArray(xml_target)) { wrap_obj = { root: { item: xml_target } }; }
+					else if (typeof xml_target !== 'object' || xml_target === null) { wrap_obj = { root: xml_target }; }
+					else {
+						const tag_keys = Object.keys(xml_target).filter(k => !k.startsWith('@_'));
+						if (tag_keys.length !== 1 || Array.isArray(xml_target[tag_keys[0]])) { wrap_obj = { root: xml_target }; }
+					}
+					result_string = `<?xml version="1.0" encoding="UTF-8"?>\n` + builder.build(wrap_obj);
+				} else if (app_state.outputFormat === 'frontmatter') {
+					let attrs = obj, body = '';
+					if (obj && typeof obj === 'object') {
+						if ('attributes' in obj) { attrs = obj.attributes; body = obj.body || ''; }
+						else if (obj.root && 'attributes' in obj.root) { attrs = obj.root.attributes; body = obj.root.body || ''; }
+					}
+					const yaml_block = jsyaml.dump(attrs, { indent: app_state.indentSize }).trim();
+					result_string = body ? `---\n${yaml_block}\n---\n\n${body}` : `---\n${yaml_block}\n---`;
+				} else if (app_state.outputFormat === 'csv' || app_state.outputFormat === 'tsv') {
+					const rows = extractTabularRows(obj);
+					const delimiter = app_state.outputFormat === 'csv' ? ',' : '\t';
+					result_string = Papa.unparse(rows, { delimiter });
+				}
+				app_state.lastRawResult = result_string;
+				renderOutputs();
+			}
+
+			function extractTabularRows(obj) {
+				if (Array.isArray(obj)) {
+					if (obj.length === 0) { return []; }
+					if (Array.isArray(obj[0])) { return obj; }
+					if (typeof obj[0] === 'object' && obj[0] !== null) {
+						const headers = Object.keys(obj[0]);
+						return [headers, ...obj.map(item => headers.map(h => item[h] ?? ''))];
+					}
+					return [['value'], ...obj.map(v => [v])];
+				}
+				if (obj && typeof obj === 'object') {
+					if (obj.rows && Array.isArray(obj.rows)) { return obj.rows; }
+					if (obj.headers && obj.data) { return [obj.headers, ...obj.data]; }
+					return Object.entries(obj).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : v]);
+				}
+				return [[String(obj)]];
+			}
+
+			function renderOutputs() {
+				if (!app_state.lastRawResult) { return; }
+				output_code.textContent = app_state.lastRawResult;
+				let lang = 'language-json';
+				if (app_state.outputFormat === 'xml') { lang = 'language-xml'; }
+				else if (app_state.outputFormat === 'yaml') { lang = 'language-yaml'; }
+				else if (app_state.outputFormat === 'frontmatter') { lang = 'language-markdown'; }
+				else if (app_state.outputFormat === 'toml') { lang = 'language-ini'; }
+				else if (app_state.outputFormat === 'csv' || app_state.outputFormat === 'tsv') { lang = 'language-plaintext'; }
+				output_code.className = `${lang} font-mono block select-all`;
+				if (typeof hljs !== 'undefined') { hljs.highlightElement(output_code); }
+				output_tree.innerHTML = '';
+				if (app_state.lastValidObj && typeof app_state.lastValidObj === 'object') {
+					const root_tree = renderTreeNodes(app_state.lastValidObj, 'Root');
+					output_tree.appendChild(root_tree);
+				} else {
+					const empty = document.createElement('div');
+					empty.className = 'text-slate-500 italic p-2';
+					empty.textContent = 'No structural data available.';
+					output_tree.appendChild(empty);
+				}
+			}
+
+			function renderTreeNodes(obj, key) {
+				const container = document.createElement('div');
+				container.className = 'ml-4 font-mono select-none text-[11px] border-l border-slate-200/50 dark:border-slate-800/80 pl-2.5 mt-1 animate-fade-in-fast';
+				const type = typeof obj;
+				const is_collapsible = obj !== null && (type === 'object' || Array.isArray(obj));
+				const row_node = document.createElement('div');
+				row_node.className = 'flex items-center py-0.5 group hover:bg-slate-100 dark:hover:bg-slate-900/60 rounded px-1.5 transition-all duration-150 cursor-pointer';
+				if (is_collapsible) {
+					const caret = document.createElement('span');
+					caret.className = 'text-indigo-500 mr-1.5 tree-arrow rotated inline-flex text-[10px] w-3 justify-center';
+					caret.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+					const icon = document.createElement('span');
+					icon.className = 'text-slate-400 dark:text-slate-500 mr-1.5 text-xs';
+					icon.innerHTML = Array.isArray(obj) ? '<i class="fa-solid fa-layer-group text-emerald-400"></i>' : '<i class="fa-solid fa-cube text-indigo-400"></i>';
+					const label = document.createElement('span');
+					label.className = 'font-semibold text-slate-700 dark:text-slate-300 mr-1.5';
+					label.textContent = `${key}: `;
+					const badge = document.createElement('span');
+					badge.className = 'text-slate-400 dark:text-slate-500 text-[10px] bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded';
+					badge.textContent = Array.isArray(obj) ? `[Array(${obj.length})]` : `{Object ${Object.keys(obj).length}}`;
+					row_node.appendChild(caret); row_node.appendChild(icon); row_node.appendChild(label); row_node.appendChild(badge);
+					const child_wrapper = document.createElement('div');
+					child_wrapper.className = 'tree-child-wrapper expanded ml-1';
+					Object.keys(obj).forEach(k => child_wrapper.appendChild(renderTreeNodes(obj[k], k)));
+					container.appendChild(row_node);
+					container.appendChild(child_wrapper);
+					const toggle = () => {
+						const collapsed = child_wrapper.classList.contains('collapsed');
+						if (collapsed) {
+							child_wrapper.classList.remove('collapsed'); child_wrapper.classList.add('expanded');
+							caret.classList.add('rotated');
+						} else {
+							child_wrapper.classList.add('collapsed'); child_wrapper.classList.remove('expanded');
+							caret.classList.remove('rotated');
+						}
+					};
+					row_node.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+				} else {
+					const spacer = document.createElement('span'); spacer.className = 'w-3 mr-1.5';
+					const icon = document.createElement('span'); icon.className = 'mr-1.5 text-[10px] w-3 text-center';
+					if (type === 'string') { icon.className += ' text-emerald-500'; icon.innerHTML = '<i class="fa-solid fa-paragraph"></i>'; }
+					else if (type === 'number') { icon.className += ' text-blue-500'; icon.innerHTML = '<i class="fa-solid fa-hashtag"></i>'; }
+					else if (type === 'boolean') { icon.className += ' text-amber-500'; icon.innerHTML = '<i class="fa-solid fa-toggle-on"></i>'; }
+					else { icon.className += ' text-slate-500'; icon.innerHTML = '<i class="fa-solid fa-ban"></i>'; }
+					const label = document.createElement('span'); label.className = 'text-slate-600 dark:text-slate-400 font-medium mr-1.5'; label.textContent = `${key}: `;
+					const val = document.createElement('span');
+					if (type === 'string') { val.className = 'text-emerald-600 dark:text-emerald-400 break-all'; val.textContent = `"${obj}"`; }
+					else if (type === 'number') { val.className = 'text-blue-500 dark:text-blue-400 font-semibold'; val.textContent = obj; }
+					else if (type === 'boolean') { val.className = 'text-amber-500 dark:text-amber-400 font-bold'; val.textContent = obj; }
+					else if (obj === null) { val.className = 'text-slate-500 italic'; val.textContent = 'null'; }
+					else { val.className = 'text-slate-500'; val.textContent = String(obj); }
+					row_node.appendChild(spacer); row_node.appendChild(icon); row_node.appendChild(label); row_node.appendChild(val);
+					container.appendChild(row_node);
+				}
+				return container;
+			}
+
+			function quickFixTabs() {
+				let text = editor_input.value;
+				text = text.replace(/\t/g, ' '.repeat(app_state.indentSize));
+				text = text.replace(/\u00A0/g, ' ');
+				editor_input.value = text;
+				showToast('Tabs replaced with spaces!');
+				processData();
+			}
+			function copyOutput() {
+				if (!app_state.lastRawResult) { showToast('Nothing to copy.', true); return; }
+				const proxy = document.createElement('textarea');
+				proxy.value = app_state.lastRawResult;
+				document.body.appendChild(proxy); proxy.select();
+				try { document.execCommand('copy'); showToast('Copied!'); } catch (e) { showToast('Copy failed.', true); }
+				document.body.removeChild(proxy);
+			}
+			function downloadOutput() {
+				if (!app_state.lastRawResult) { showToast('Nothing to download.', true); return; }
+				let ext = 'txt', mime = 'text/plain';
+				if (app_state.outputFormat === 'json') { ext = 'json'; mime = 'application/json'; }
+				else if (app_state.outputFormat === 'xml') { ext = 'xml'; mime = 'application/xml'; }
+				else if (app_state.outputFormat === 'yaml') { ext = 'yml'; mime = 'text/yaml'; }
+				else if (app_state.outputFormat === 'toml') { ext = 'toml'; mime = 'text/plain'; }
+				else if (app_state.outputFormat === 'frontmatter') { ext = 'md'; mime = 'text/markdown'; }
+				else if (app_state.outputFormat === 'csv') { ext = 'csv'; mime = 'text/csv'; }
+				else if (app_state.outputFormat === 'tsv') { ext = 'tsv'; mime = 'text/tab-separated-values'; }
+				const blob = new Blob([app_state.lastRawResult], { type: `${mime};charset=utf-8;` });
+				const url = URL.createObjectURL(blob);
+				const anchor = document.createElement('a');
+				anchor.href = url; anchor.download = `covexord_output.${ext}`; anchor.style.display = 'none';
+				document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor); URL.revokeObjectURL(url);
+				showToast(`Downloaded .${ext}`);
+			}
+			function handleFileSelect(event) { if (event.target.files[0]) { readFile(event.target.files[0]); } }
+			function setupDragAndDrop() {
+				['dragenter', 'dragover'].forEach(name => drop_zone.addEventListener(name, (e) => { e.preventDefault(); drop_overlay.classList.remove('hidden'); }));
+				['dragleave', 'drop'].forEach(name => drop_zone.addEventListener(name, (e) => { e.preventDefault(); drop_overlay.classList.add('hidden'); }));
+				drop_zone.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) { readFile(e.dataTransfer.files[0]); } });
+			}
+			function readFile(file) {
+				const reader = new FileReader();
+				reader.onload = function(e) {
+					editor_input.value = e.target.result;
+					const ext = file.name.split('.').pop().toLowerCase();
+					if (ext === 'md') { setInputFormat('frontmatter'); }
+					else if (ext === 'json') { setInputFormat('json'); }
+					else if (ext === 'xml') { setInputFormat('xml'); }
+					else if (ext === 'yml' || ext === 'yaml') { setInputFormat('yaml'); }
+					else if (ext === 'toml') { setInputFormat('toml'); }
+					else if (ext === 'csv') { setInputFormat('csv'); }
+					else if (ext === 'tsv') { setInputFormat('tsv'); }
+					else { processData(); }
+				};
+				reader.readAsText(file);
+			}
+
+			function showToast(message, is_error = false) {
+				if (toast_timer) { clearTimeout(toast_timer); }
+				toast_text.textContent = message;
+				const icon = toast_el.querySelector('i');
+				if (is_error) {
+					toast_el.classList.add('border-l-4', 'border-red-500');
+					icon.className = 'fa-solid fa-circle-exclamation text-red-400';
+				} else {
+					toast_el.classList.remove('border-l-4', 'border-red-500');
+					icon.className = 'fa-solid fa-circle-check text-emerald-400';
+				}
+				toast_el.classList.remove('translate-y-16', 'opacity-0');
+				toast_el.classList.add('translate-y-0', 'opacity-100');
+				toast_timer = setTimeout(() => {
+					toast_el.classList.remove('translate-y-0', 'opacity-100');
+					toast_el.classList.add('translate-y-16', 'opacity-0');
+				}, 3000);
+			}
+			function showError(msg) {
+				error_message.textContent = msg;
+				error_banner.classList.remove('hidden');
+				output_code.textContent = '/* Fix errors to generate output */';
+				output_code.className = 'language-javascript';
+				if (typeof hljs !== 'undefined') { hljs.highlightElement(output_code); }
+				output_tree.innerHTML = '';
+			}
+			function hideError() { error_banner.classList.add('hidden'); }
+
+			window.addEventListener('load', () => {
+				const saved_theme = localStorage.getItem('covexord-theme');
+				app_state.theme = saved_theme === 'light' ? 'light' : 'dark';
+				applyTheme();
+				setupDragAndDrop();
+				updateFormatSelectors();
+				setIndentType('tabs');
+				setViewType('code');
+				
+				const saved = localStorage.getItem(local_storage_key);
+				let restored = false;
+				if (saved) {
+					try {
+						const session = JSON.parse(saved);
+						if (session && typeof session.text === 'string' && session.text.trim().length > 0) {
+							editor_input.value = session.text;
+							if (session.inputFormat && formats.includes(session.inputFormat)) {
+								app_state.inputFormat = session.inputFormat;
+								updateFormatSelectors();
+							}
+							processData();
+							showToast('Session restored from last visit');
+							restored = true;
+						}
+					} catch (e) { }
+				}
+				if (!restored) { loadSample(); }
+				updateIndentationVisibility();
+			});
+
+			// Expose critical functions to window for onclick handlers
+			window.toggleTheme = toggleTheme;
+			window.setInputFormat = setInputFormat;
+			window.setOutputFormat = setOutputFormat;
+			window.swapFormats = swapFormats;
+			window.setIndentType = setIndentType;
+			window.handleIndentSizeChange = handleIndentSizeChange;
+			window.setViewType = setViewType;
+			window.loadSample = loadSample;
+			window.clearInput = clearInput;
+			window.copyOutput = copyOutput;
+			window.downloadOutput = downloadOutput;
+			window.handleFileSelect = handleFileSelect;
+			window.quickFixTabs = quickFixTabs;
+			window.loadFromLocalStorage = loadFromLocalStorage;
+			window.openModal = openModal;
+			window.closeModal = closeModal;
+			window.shareTwitter = shareTwitter;
+            window.processData = processData;
+		})();
+	</script>
+</body>
+</html>
